@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LibreTV 认证诊断工具</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 20px auto;
+            padding: 20px;
+            background: #1a1a1a;
+            color: #fff;
+            line-height: 1.6;
+        }
+        .container {
+            background: #2a2a2a;
+            border-radius: 10px;
+            padding: 30px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .header h1 {
+            color: #4CAF50;
+            margin-bottom: 10px;
+        }
+        .diagnostic-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #555;
+            border-radius: 5px;
+            background: #333;
+        }
+        .diagnostic-section h3 {
+            color: #4CAF50;
+            margin-top: 0;
+        }
+        .status-good {
+            color: #4CAF50;
+        }
+        .status-warning {
+            color: #FF9800;
+        }
+        .status-error {
+            color: #f44336;
+        }
+        .button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 5px;
+        }
+        .button:hover {
+            background: #45a049;
+        }
+        .button.secondary {
+            background: #2196F3;
+        }
+        .code {
+            background: #222;
+            padding: 10px;
+            border-radius: 3px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            overflow-x: auto;
+            margin: 10px 0;
+            border: 1px solid #555;
+        }
+        .fix-section {
+            background: #0d47a1;
+            border: 1px solid #2196F3;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        .nav {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .nav a {
+            color: #4CAF50;
+            text-decoration: none;
+            margin: 0 10px;
+            padding: 8px 16px;
+            border: 1px solid #4CAF50;
+            border-radius: 5px;
+            display: inline-block;
+        }
+        .nav a:hover {
+            background: #4CAF50;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="nav">
+            <a href="index.html">🏠 返回首页</a>
+            <a href="simple-admin.html">⚙️ 密码管理</a>
+            <a href="quick-fix.html">🛠️ 诊断工具</a>
+        </div>
+
+        <div class="header">
+            <h1>🔍 认证诊断工具</h1>
+            <p>诊断和修复认证问题</p>
+        </div>
+
+        <button class="button" onclick="runFullDiagnosis()">🔍 开始全面诊断</button>
+        <button class="button secondary" onclick="testApiCall()">🧪 测试API调用</button>
+
+        <div id="diagnosisResults"></div>
+
+        <div class="fix-section">
+            <h3>🛠️ 常见问题修复方案</h3>
+            <div id="fixSuggestions">点击"开始全面诊断"获取修复建议</div>
+        </div>
+    </div>
+
+    <script>
+        // SHA-256哈希函数
+        async function calculateSHA256(text) {
+            const encoder = new TextEncoder();
+            const data = encoder.encode(text);
+            const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        }
+
+        // 检测部署环境
+        function detectEnvironment() {
+            const hostname = window.location.hostname;
+            const protocol = window.location.protocol;
+            
+            if (hostname.includes('edgeone.app')) {
+                return 'EdgeOne Pages';
+            } else if (hostname.includes('vercel.app')) {
+                return 'Vercel';
+            } else if (hostname.includes('netlify.app')) {
+                return 'Netlify';
+            } else if (hostname === 'localhost' || hostname === '127.0.0.1') {
+                return 'Local Development';
+            } else {
+                return 'Custom Domain / Other';
+            }
+        }
+
+        // 全面诊断
+        async function runFullDiagnosis() {
+            const results = document.getElementById('diagnosisResults');
+            const fixSuggestions = document.getElementById('fixSuggestions');
+            
+            results.innerHTML = '<div class="diagnostic-section"><h3>🔄 诊断中...</h3></div>';
+            
+            let diagnostics = [];
+            let fixes = [];
+            
+            // 1. 环境检测
+            const environment = detectEnvironment();
+            diagnostics.push(`<div class="diagnostic-section">
+                <h3>🌐 部署环境</h3>
+                <p><strong>检测结果:</strong> ${environment}</p>
+                <p><strong>域名:</strong> ${window.location.hostname}</p>
+                <p><strong>协议:</strong> ${window.location.protocol}</p>
+            </div>`);
+
+            // 2. 配置文件检测
+            let configStatus = '';
+            let currentPassword = '';
+            try {
+                // 等待配置加载
+                let retryCount = 0;
+                while ((!window.MASTER_CONFIG || !window.MASTER_CONFIG.auth) && retryCount < 5) {
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                    retryCount++;
+                }
+                
+                if (window.MASTER_CONFIG && window.MASTER_CONFIG.auth) {
+                    currentPassword = window.MASTER_CONFIG.auth.password;
+                    const hash = await calculateSHA256(currentPassword);
+                    configStatus = `<span class="status-good">✅ 配置正常</span>
+                    <div class="code">当前密码: ${currentPassword}
+密码哈希: ${hash}</div>`;
+                } else {
+                    configStatus = '<span class="status-error">❌ 配置加载失败</span>';
+                    fixes.push('配置文件问题：请检查 config/master-config.js 文件是否存在且格式正确');
+                }
+            } catch (error) {
+                configStatus = `<span class="status-error">❌ 配置检测错误: ${error.message}</span>`;
+            }
+            
+            diagnostics.push(`<div class="diagnostic-section">
+                <h3>⚙️ 前端配置检测</h3>
+                <p>${configStatus}</p>
+            </div>`);
+
+            // 3. API调用测试
+            diagnostics.push(`<div class="diagnostic-section">
+                <h3>🔌 API连接测试</h3>
+                <p id="apiTestResult">正在测试...</p>
+            </div>`);
+
+            // 4. 环境变量建议
+            if (environment.includes('EdgeOne') || environment.includes('Vercel') || environment.includes('Netlify')) {
+                fixes.push(`<strong>${environment} 环境变量设置：</strong><br>
+                需要在部署平台设置环境变量：<div class="code">PASSWORD=${currentPassword || 'admin123'}</div>
+                ${getEnvironmentInstructions(environment)}`);
+            }
+
+            // 5. 本地存储检测
+            const authSession = localStorage.getItem('authSession');
+            const librevtAuth = localStorage.getItem('libretv_auth');
+            let storageStatus = '';
+            if (authSession || librevtAuth) {
+                storageStatus = '<span class="status-warning">⚠️ 发现旧的认证会话</span>';
+                fixes.push('清除旧认证会话：<button class="button" onclick="clearAuthSessions()">清除认证会话</button>');
+            } else {
+                storageStatus = '<span class="status-good">✅ 认证会话干净</span>';
+            }
+            
+            diagnostics.push(`<div class="diagnostic-section">
+                <h3>💾 本地存储检测</h3>
+                <p>${storageStatus}</p>
+            </div>`);
+
+            results.innerHTML = diagnostics.join('');
+            fixSuggestions.innerHTML = fixes.length > 0 ? fixes.join('<br><br>') : '✅ 未发现需要修复的问题';
+
+            // 异步进行API测试
+            setTimeout(testApiConnection, 1000);
+        }
+
+        // 获取环境配置说明
+        function getEnvironmentInstructions(env) {
+            switch(env) {
+                case 'EdgeOne Pages':
+                    return '1. 登录 EdgeOne Pages 控制台<br>2. 选择你的项目<br>3. 进入"环境变量"设置<br>4. 添加 PASSWORD 变量<br>5. 重新部署';
+                case 'Vercel':
+                    return '1. 登录 Vercel 控制台<br>2. 选择你的项目<br>3. 进入 Settings > Environment Variables<br>4. 添加 PASSWORD 变量<br>5. 重新部署';
+                case 'Netlify':
+                    return '1. 登录 Netlify 控制台<br>2. 选择你的站点<br>3. 进入 Site settings > Environment variables<br>4. 添加 PASSWORD 变量<br>5. 重新部署';
+                default:
+                    return '请根据你的部署平台设置相应的环境变量';
+            }
+        }
+
+        // 测试API连接
+        async function testApiConnection() {
+            const testResult = document.getElementById('apiTestResult');
+            
+            try {
+                // 构造测试API调用
+                const testUrl = '/proxy/https%3A%2F%2Fapi.example.com%2Ftest';
+                const currentPassword = window.MASTER_CONFIG?.auth?.password || 'admin123';
+                const hash = await calculateSHA256(currentPassword);
+                const timestamp = Date.now();
+                
+                const fullUrl = `${testUrl}?auth=${hash}&t=${timestamp}`;
+                
+                testResult.innerHTML = `正在测试API调用...<div class="code">测试URL: ${fullUrl.substring(0, 100)}...
+使用密码: ${currentPassword}
+计算哈希: ${hash}</div>`;
+                
+                const response = await fetch(fullUrl);
+                const responseText = await response.text();
+                
+                if (response.status === 401) {
+                    testResult.innerHTML = `<span class="status-error">❌ 认证失败 (401)</span>
+                    <div class="code">响应: ${responseText}</div>
+                    <p><strong>可能原因：</strong></p>
+                    <ul>
+                        <li>服务端密码与前端密码不匹配</li>
+                        <li>环境变量未设置或设置错误</li>
+                        <li>代理函数配置有误</li>
+                    </ul>`;
+                } else if (response.ok) {
+                    testResult.innerHTML = '<span class="status-good">✅ API调用成功</span>';
+                } else {
+                    testResult.innerHTML = `<span class="status-warning">⚠️ 其他错误 (${response.status})</span>
+                    <div class="code">${responseText}</div>`;
+                }
+            } catch (error) {
+                testResult.innerHTML = `<span class="status-error">❌ 测试失败: ${error.message}</span>`;
+            }
+        }
+
+        // 单独的API测试
+        async function testApiCall() {
+            await testApiConnection();
+        }
+
+        // 清除认证会话
+        function clearAuthSessions() {
+            localStorage.removeItem('authSession');
+            localStorage.removeItem('libretv_auth');
+            alert('✅ 认证会话已清除，请刷新页面重新登录');
+        }
+
+        // 页面加载时自动运行基础诊断
+        window.addEventListener('load', () => {
+            setTimeout(runFullDiagnosis, 1000);
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LibreTV 快速修复诊断</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 20px auto; padding: 20px; background: #1a1a1a; color: #fff; }
+        .section { margin: 20px 0; padding: 15px; border: 1px solid #333; border-radius: 5px; background: #2a2a2a; }
+        .success { border-color: #4CAF50; background: #1b5e20; }
+        .error { border-color: #f44336; background: #b71c1c; }
+        .warning { border-color: #ff9800; background: #e65100; }
+        .info { border-color: #2196F3; background: #0d47a1; }
+        .code { background: #333; padding: 10px; border-radius: 3px; font-family: monospace; white-space: pre-wrap; overflow-x: auto; }
+        button { background: #2196F3; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; margin: 5px; }
+        button:hover { background: #1976D2; }
+        input { padding: 8px; border: 1px solid #555; border-radius: 3px; background: #333; color: #fff; margin: 5px; }
+    </style>
+</head>
+<body>
+    <h1>🔧 LibreTV 快速修复诊断</h1>
+    
+    <div id="step1" class="section info">
+        <h3>步骤1：检查配置加载</h3>
+        <button onclick="checkConfig()">检查配置</button>
+        <div id="configResult"></div>
+    </div>
+    
+    <div id="step2" class="section info">
+        <h3>步骤2：测试密码验证</h3>
+        <input type="password" id="testPassword" placeholder="输入密码: admin123" value="admin123">
+        <button onclick="testPassword()">测试密码</button>
+        <div id="passwordResult"></div>
+    </div>
+    
+    <div id="step3" class="section info">
+        <h3>步骤3：测试代理认证</h3>
+        <button onclick="testProxyAuth()">测试代理认证</button>
+        <div id="proxyResult"></div>
+    </div>
+    
+    <div id="step4" class="section info">
+        <h3>步骤4：一键修复</h3>
+        <button onclick="quickFix()" style="background: #4CAF50;">一键修复问题</button>
+        <div id="fixResult"></div>
+    </div>
+    
+    <div id="step5" class="section info">
+        <h3>步骤5：密码修改助手</h3>
+        <input type="text" id="newPasswordInput" placeholder="输入新密码" style="width: 200px;">
+        <button onclick="testPasswordChange()" style="background: #FF9800;">生成修改指南</button>
+        <div id="passwordChangeResult"></div>
+    </div>
+    
+    <div id="step6" class="section info">
+        <h3>步骤6：环境变量检测</h3>
+        <button onclick="checkEnvironment()" style="background: #9C27B0;">检测部署环境</button>
+        <div id="environmentResult"></div>
+    </div>
+
+    <!-- 按正确顺序加载脚本 -->
+    <script src="config/master-config.js"></script>
+    <script src="js/auth-config.js"></script>
+    <script src="js/password.js"></script>
+    <script src="js/proxy-auth.js"></script>
+
+    <script>
+        // 等待配置加载
+        setTimeout(() => {
+            checkConfig();
+        }, 1000);
+        
+        function checkConfig() {
+            const result = document.getElementById('configResult');
+            const section = document.getElementById('step1');
+            
+            const checks = [
+                `MASTER_CONFIG存在: ${!!window.MASTER_CONFIG}`,
+                `MASTER_CONFIG_READY: ${!!window.MASTER_CONFIG_READY}`,
+                `AUTH_CONFIG存在: ${!!window.AUTH_CONFIG}`,
+                `密码设置: ${window.MASTER_CONFIG?.auth?.password || '未设置'}`,
+                `密码哈希: ${window.MASTER_CONFIG?.auth?.passwordHash ? window.MASTER_CONFIG.auth.passwordHash.substring(0, 16) + '...' : '未生成'}`,
+                `启用状态: ${window.AUTH_CONFIG?.enabled}`,
+                `getPasswordHash函数: ${typeof window.getPasswordHash}`,
+                `verifyPassword函数: ${typeof window.verifyPassword}`,
+                `ProxyAuth对象: ${typeof window.ProxyAuth}`,
+                `ProxyAuth.addAuthToProxyUrl函数: ${typeof window.ProxyAuth?.addAuthToProxyUrl}`,
+                `ProxyAuth.getPasswordHash函数: ${typeof window.ProxyAuth?.getPasswordHash}`,
+                `localStorage认证会话: ${localStorage.getItem(window.AUTH_CONFIG?.localStorageKey || 'authSession') ? '存在' : '不存在'}`,
+                `主配置密码与设置密码匹配: ${window.MASTER_CONFIG?.auth?.password === 'acW8E!X#hX0ktRMs' ? '是' : '否'}`
+            ];
+            
+            const hasErrors = checks.some(check => 
+                check.includes('false') || 
+                check.includes('undefined') || 
+                check.includes('未设置') || 
+                check.includes('未生成') ||
+                (check.includes('主配置密码与设置密码匹配') && check.includes('否'))
+            );
+            
+            result.innerHTML = `<div class="code">${checks.join('\n')}</div>`;
+            section.className = hasErrors ? 'section error' : 'section success';
+            
+            if (hasErrors) {
+                result.innerHTML += '<p><strong>❌ 发现配置问题，请点击一键修复</strong></p>';
+            } else {
+                result.innerHTML += '<p><strong>✅ 配置检查通过</strong></p>';
+            }
+        }
+        
+        async function testPassword() {
+            const password = document.getElementById('testPassword').value;
+            const result = document.getElementById('passwordResult');
+            const section = document.getElementById('step2');
+            
+            if (!password) {
+                result.innerHTML = '<p>❌ 请输入密码</p>';
+                return;
+            }
+            
+            try {
+                // 等待配置就绪
+                let attempts = 0;
+                while ((!window.MASTER_CONFIG || !window.MASTER_CONFIG_READY) && attempts < 50) {
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                    attempts++;
+                }
+                
+                if (typeof window.verifyPassword === 'function') {
+                    const isValid = await window.verifyPassword(password);
+                    if (isValid) {
+                        result.innerHTML = '<p><strong>✅ 密码验证成功！</strong></p>';
+                        section.className = 'section success';
+                    } else {
+                        result.innerHTML = '<p><strong>❌ 密码验证失败</strong></p>';
+                        section.className = 'section error';
+                    }
+                } else {
+                    result.innerHTML = '<p><strong>❌ verifyPassword函数不存在</strong></p>';
+                    section.className = 'section error';
+                }
+            } catch (error) {
+                result.innerHTML = `<p><strong>❌ 验证出错: ${error.message}</strong></p>`;
+                section.className = 'section error';
+            }
+        }
+        
+        async function testProxyAuth() {
+            const result = document.getElementById('proxyResult');
+            const section = document.getElementById('step3');
+            
+            try {
+                // 测试获取密码哈希
+                if (typeof window.getPasswordHash === 'function') {
+                    const hash = await window.getPasswordHash();
+                    if (hash) {
+                        result.innerHTML = `<p><strong>✅ 密码哈希获取成功</strong></p><div class="code">哈希: ${hash}</div>`;
+                        
+                        // 测试代理认证URL生成
+                        if (window.ProxyAuth && typeof window.ProxyAuth.addAuthToProxyUrl === 'function') {
+                            const testUrl = await window.ProxyAuth.addAuthToProxyUrl('https://example.com/api');
+                            result.innerHTML += `<p><strong>✅ 代理认证URL生成成功</strong></p><div class="code">URL: ${testUrl}</div>`;
+                            section.className = 'section success';
+                        } else {
+                            result.innerHTML += '<p><strong>❌ ProxyAuth.addAuthToProxyUrl不存在</strong></p>';
+                            section.className = 'section error';
+                        }
+                    } else {
+                        result.innerHTML = '<p><strong>❌ 密码哈希获取失败</strong></p>';
+                        section.className = 'section error';
+                    }
+                } else {
+                    result.innerHTML = '<p><strong>❌ getPasswordHash函数不存在</strong></p>';
+                    section.className = 'section error';
+                }
+            } catch (error) {
+                result.innerHTML = `<p><strong>❌ 代理认证测试失败: ${error.message}</strong></p>`;
+                section.className = 'section error';
+            }
+        }
+        
+        async function quickFix() {
+            const result = document.getElementById('fixResult');
+            const section = document.getElementById('step4');
+            
+            result.innerHTML = '<p>🔧 正在修复问题...</p>';
+            
+            try {
+                // 1. 清除所有缓存和存储
+                localStorage.clear();
+                sessionStorage.clear();
+                if (window.ProxyAuth && typeof window.ProxyAuth.clearAuthCache === 'function') {
+                    window.ProxyAuth.clearAuthCache();
+                }
+                result.innerHTML += '<p>✅ 本地存储和缓存已清除</p>';
+                
+                // 2. 重新设置主配置准备状态
+                window.MASTER_CONFIG_READY = false;
+                result.innerHTML += '<p>🔄 重置配置状态</p>';
+                
+                // 3. 强制重新初始化主配置
+                if (window.MASTER_CONFIG && window.MASTER_CONFIG.auth && window.MASTER_CONFIG.auth.password) {
+                    try {
+                        // 手动计算密码哈希
+                        const encoder = new TextEncoder();
+                        const data = encoder.encode(window.MASTER_CONFIG.auth.password);
+                        const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+                        const hashArray = Array.from(new Uint8Array(hashBuffer));
+                        const hash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+                        
+                        window.MASTER_CONFIG.auth.passwordHash = hash;
+                        window.MASTER_CONFIG_READY = true;
+                        
+                        result.innerHTML += '<p>✅ 主配置密码哈希重新生成完成</p>';
+                        result.innerHTML += `<div class="code">密码哈希: ${hash.substring(0, 16)}...</div>`;
+                        
+                        // 触发配置就绪事件
+                        window.dispatchEvent(new CustomEvent('masterConfigReady', { 
+                            detail: { config: window.MASTER_CONFIG } 
+                        }));
+                        
+                    } catch (hashError) {
+                        result.innerHTML += `<p>❌ 密码哈希生成失败: ${hashError.message}</p>`;
+                        throw hashError;
+                    }
+                } else {
+                    throw new Error('主配置或密码未正确设置');
+                }
+                
+                // 4. 等待配置稳定
+                await new Promise(resolve => setTimeout(resolve, 500));
+                
+                // 5. 验证修复结果
+                const finalHash = await window.getPasswordHash();
+                if (finalHash) {
+                    result.innerHTML += '<p><strong>🎉 修复成功！系统已准备就绪</strong></p>';
+                    section.className = 'section success';
+                    
+                    // 重新检查所有状态
+                    setTimeout(() => {
+                        checkConfig();
+                        document.getElementById('testPassword').value = 'acW8E!X#hX0ktRMs';
+                        testPassword();
+                        testProxyAuth();
+                    }, 500);
+                } else {
+                    result.innerHTML += '<p><strong>❌ 修复未完全成功，密码哈希仍无法获取</strong></p>';
+                    section.className = 'section error';
+                }
+                
+            } catch (error) {
+                result.innerHTML += `<p><strong>❌ 修复过程出错: ${error.message}</strong></p>`;
+                section.className = 'section error';
+                console.error('修复过程详细错误:', error);
+            }
+        }
+        
+        // 添加密码修改测试功能
+        async function testPasswordChange() {
+            const newPassword = document.getElementById('newPasswordInput').value;
+            if (!newPassword) {
+                alert('请输入新密码');
+                return;
+            }
+            
+            const result = document.getElementById('passwordChangeResult');
+            result.innerHTML = '<p>🔄 正在测试新密码的哈希生成...</p>';
+            
+            try {
+                // 计算新密码的哈希
+                const encoder = new TextEncoder();
+                const data = encoder.encode(newPassword);
+                const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+                const hashArray = Array.from(new Uint8Array(hashBuffer));
+                const newHash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+                
+                result.innerHTML = `
+                    <p><strong>✅ 新密码哈希计算成功</strong></p>
+                    <div class="code">新密码: ${newPassword}</div>
+                    <div class="code">新哈希: ${newHash}</div>
+                    <p><strong>📋 修改步骤：</strong></p>
+                    <ol>
+                        <li>打开 <code>config/master-config.js</code></li>
+                        <li>找到第8行的 <code>password</code> 字段</li>
+                        <li>将 <code>'admin123'</code> 改为 <code>'${newPassword}'</code></li>
+                        <li>保存文件并刷新页面</li>
+                    </ol>
+                    <p><strong>🔄 系统会自动同步所有组件的密码哈希</strong></p>
+                `;
+            } catch (error) {
+                result.innerHTML = `<p><strong>❌ 哈希计算失败: ${error.message}</strong></p>`;
+            }
+        }
+        
+        // 环境检测功能
+        function checkEnvironment() {
+            const result = document.getElementById('environmentResult');
+            const section = document.getElementById('step6');
+            
+            result.innerHTML = '<p>🔍 正在检测部署环境...</p>';
+            
+            const hostname = window.location.hostname;
+            const protocol = window.location.protocol;
+            const currentPassword = window.MASTER_CONFIG?.auth?.password;
+            
+            let environmentInfo = [];
+            let recommendations = [];
+            
+            // 检测部署平台
+            if (hostname.includes('edgeone.app')) {
+                environmentInfo.push('🌐 检测到 EdgeOne Pages 部署');
+                recommendations.push('请在 EdgeOne Pages 控制台设置 PASSWORD 环境变量');
+                recommendations.push('环境变量值应与 config/master-config.js 中的密码一致');
+            } else if (hostname.includes('vercel.app')) {
+                environmentInfo.push('▲ 检测到 Vercel 部署');
+                recommendations.push('请在 Vercel 项目设置中添加 PASSWORD 环境变量');
+            } else if (hostname.includes('netlify.app')) {
+                environmentInfo.push('🟢 检测到 Netlify 部署');
+                recommendations.push('请在 Netlify 站点设置中添加 PASSWORD 环境变量');
+            } else if (hostname === 'localhost' || hostname === '127.0.0.1') {
+                environmentInfo.push('💻 本地开发环境');
+                recommendations.push('本地环境直接从 config/master-config.js 读取密码');
+            } else {
+                environmentInfo.push('🌍 自定义域名部署');
+                recommendations.push('请根据你的部署平台设置相应的环境变量');
+            }
+            
+            environmentInfo.push(`🔗 当前域名: ${hostname}`);
+            environmentInfo.push(`🔒 协议: ${protocol}`);
+            environmentInfo.push(`🗝️ 配置密码: ${currentPassword ? '已设置' : '未设置'}`);
+            
+            result.innerHTML = `
+                <div class="code">${environmentInfo.join('\n')}</div>
+                <p><strong>💡 配置建议：</strong></p>
+                <ul>
+                    ${recommendations.map(rec => `<li>${rec}</li>`).join('')}
+                    <li>确保环境变量密码与本地配置文件密码一致</li>
+                    <li>设置环境变量后需要重新部署项目</li>
+                </ul>
+                <p><strong>📖 详细指南：</strong> 查看 <code>环境变量配置指南.md</code></p>
+            `;
+            
+            section.className = 'section success';
+        }
+        
+        // 页面加载时自动检查
+        window.addEventListener('load', () => {
+            setTimeout(checkConfig, 2000);
+        });
+    </script>
+</body>
+</html>

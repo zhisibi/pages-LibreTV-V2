@@ -1,0 +1,19 @@
+# LibreTV 部署配置说明
+# 当前密码: admin123
+# 密码哈希: 240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9
+
+## 🌟 固定密码部署（推荐用于云端）
+所有密码都已写入代码文件中，无需设置环境变量：
+- config/master-config.js (前端配置)
+- functions/proxy/[[path]].js (服务端代理)
+- js/auth-config.js (认证配置)
+- config/config-loader.mjs (配置加载器)
+
+## 🔧 环境变量部署（可选）
+如果你仍想使用环境变量，可以设置：
+PASSWORD=admin123
+
+部署平台设置：
+- EdgeOne Pages: 控制台 → 环境变量 → PASSWORD
+- Vercel: Settings → Environment Variables → PASSWORD  
+- Netlify: Site settings → Environment variables → PASSWORD

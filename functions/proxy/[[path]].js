@@ -9,7 +9,7 @@
 // PASSWORD (例如 "your_password") - 鉴权密码（可选，如果不设置则使用固定密码）
 
 // 🔐 固定密码配置 - 修改这里设置你的自定义密码
-const FIXED_PASSWORD = 'admin123'; // 🔥 修改这里设置自定义密码
+const FIXED_PASSWORD = '871129'; // 🔥 修改这里设置自定义密码
 
 // 动态密码获取函数
 function getServerPassword(env) {

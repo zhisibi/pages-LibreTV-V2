@@ -32,7 +32,7 @@ async function loadMasterConfig() {
             auth: {
                 enabled: true,
                 username: 'admin',
-                password: 'admin123',  // 🔥 修改这里设置自定义密码
+                password: '871129',  // 🔥 修改这里设置自定义密码
                 passwordHash: null,
                 sessionDuration: 90 * 24 * 60 * 60 * 1000,
                 maxLoginAttempts: 5,
@@ -200,4 +200,5 @@ if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' |
             console.log('🔒 密码保护:', masterConfig.auth.enabled ? '已启用' : '已禁用');
         }
     }, 500);
+
 }
